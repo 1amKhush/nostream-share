@@ -9,9 +9,8 @@
  *
  * Replaceable events (kinds 0, 3, 41, 10000-19999, 30000-39999):
  *   The replaceable_events_idx partial unique index lives only on events_hot.
- *   Because replaceable events are always inserted with a current timestamp,
- *   they naturally land in events_hot. The ON CONFLICT upsert continues to work
- *   without any application changes.
+ *   Application upserts for replaceable events must target events_hot so
+ *   ON CONFLICT can use this partial unique index.
  *
  * event_tags:
  *   Remains a flat local table. The process_event_tags trigger fires on events_hot
@@ -39,6 +38,10 @@ exports.up = async function (knex) {
       ALTER TRIGGER insert_event_tags ON events_old
         RENAME TO insert_event_tags_old
     `)
+
+    // Older migrations create this global index name on the flat table.
+    // Drop it before creating the partition-era index with the same name.
+    await knex.raw('DROP INDEX IF EXISTS replaceable_events_idx')
 
     // ------------------------------------------------------------------ //
     // 3. Create the new partitioned parent table

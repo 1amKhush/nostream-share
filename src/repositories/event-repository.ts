@@ -39,6 +39,8 @@ import { SubscriptionFilter } from '../@types/subscription'
 
 const even = pipe(modulo(__, 2), equals(0))
 
+const HOT_EVENTS_TABLE = 'events_hot'
+
 const groupByLengthSpec = groupBy<string, 'exact' | 'even' | 'odd'>(
   pipe(
     prop('length'),
@@ -221,7 +223,7 @@ export class EventRepository implements IEventRepository {
       deleted_at: always(null),
     })(event)
 
-    const query = this.masterDbClient('events')
+    const query = this.masterDbClient(HOT_EVENTS_TABLE)
       .insert(row)
       // NIP-16: Replaceable Events
       // NIP-33: Parameterized Replaceable Events
@@ -231,7 +233,7 @@ export class EventRepository implements IEventRepository {
         )
       )
       .merge(omit(['event_pubkey', 'event_kind', 'event_deduplication'])(row))
-      .where('events.event_created_at', '<', row.event_created_at)
+      .where(`${HOT_EVENTS_TABLE}.event_created_at`, '<', row.event_created_at)
 
     return {
       then: <T1, T2>(onfulfilled: (value: number) => T1 | PromiseLike<T1>, onrejected: (reason: any) => T2 | PromiseLike<T2>) => query.then(prop('rowCount') as () => number).then(onfulfilled, onrejected),

@@ -98,5 +98,31 @@ describe('ReplaceableEventStrategy', () => {
         ['OK', 'id', false, 'error: ']
       )
     })
+
+    it('rejects duplicate event id using legacy unique constraint name', async () => {
+      const error = new Error('duplicate key value violates unique constraint "events_event_id_unique"')
+      eventRepositoryUpsertStub.rejects(error)
+
+      await strategy.execute(event)
+
+      expect(eventRepositoryUpsertStub).to.have.been.calledOnceWithExactly(event)
+      expect(webSocketEmitStub).to.have.been.calledOnceWithExactly(
+        WebSocketAdapterEvent.Message,
+        ['OK', 'id', false, 'rejected: event already exists']
+      )
+    })
+
+    it('rejects duplicate event id using events_hot unique constraint name', async () => {
+      const error = new Error('duplicate key value violates unique constraint "events_hot_event_id_idx"')
+      eventRepositoryUpsertStub.rejects(error)
+
+      await strategy.execute(event)
+
+      expect(eventRepositoryUpsertStub).to.have.been.calledOnceWithExactly(event)
+      expect(webSocketEmitStub).to.have.been.calledOnceWithExactly(
+        WebSocketAdapterEvent.Message,
+        ['OK', 'id', false, 'rejected: event already exists']
+      )
+    })
   })
 })

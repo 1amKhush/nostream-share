@@ -27,7 +27,8 @@ export class ReplaceableEventStrategy implements IEventStrategy<Event, Promise<v
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
-        if (error.message.endsWith('duplicate key value violates unique constraint "events_event_id_unique"')) {
+        if (/duplicate key value violates unique constraint/.test(error.message)
+          && /events_event_id_unique|events_hot_event_id_idx/.test(error.message)) {
           this.webSocket.emit(
             WebSocketAdapterEvent.Message,
             createCommandResult(event.id, false, 'rejected: event already exists'),
