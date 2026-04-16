@@ -40,6 +40,12 @@ exports.up = async function (knex) {
         RENAME TO insert_event_tags_old
     `)
 
+    // A pre-partition migration creates a global index named
+    // `replaceable_events_idx` on the flat `events` table.
+    // After renaming `events` -> `events_old`, the index keeps its global name,
+    // so creating the new hot-partition index with the same name would fail.
+    await knex.raw('DROP INDEX IF EXISTS replaceable_events_idx')
+
     // ------------------------------------------------------------------ //
     // 3. Create the new partitioned parent table
     //    PK is (id, event_created_at) — partition key must be in PK.
