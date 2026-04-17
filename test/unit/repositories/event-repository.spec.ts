@@ -345,6 +345,30 @@ describe('EventRepository', () => {
           expect(query).to.equal('select "events".* from "events" left join "event_tags" on "events"."event_id" = "event_tags"."event_id" where (event_tags.tag_name = \'r\' AND event_tags.tag_value = \'aaaaaa\' or event_tags.tag_name = \'r\' AND event_tags.tag_value = \'bbbbbb\') order by "event_created_at" asc limit 500')
         })
       })
+
+      describe('ids with generic tag filters', () => {
+        it('selects events by exact id and #d tag without ambiguous event_id', () => {
+          const filters = [{
+            ids: ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+            '#d': ['variable'],
+          }]
+
+          const query = repository.findByFilters(filters).toString()
+
+          expect(query).to.equal('select "events".* from "events" left join "event_tags" on "events"."event_id" = "event_tags"."event_id" where ("events"."event_id" in (X\'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\')) and (event_tags.tag_name = \'d\' AND event_tags.tag_value = \'variable\') order by "event_created_at" asc limit 500')
+        })
+
+        it('selects events by id prefix and #d tag without ambiguous event_id', () => {
+          const filters = [{
+            ids: ['abc'],
+            '#d': ['variable'],
+          }]
+
+          const query = repository.findByFilters(filters).toString()
+
+          expect(query).to.equal('select "events".* from "events" left join "event_tags" on "events"."event_id" = "event_tags"."event_id" where (substring("events"."event_id" from 1 for 2) BETWEEN E\'\\\\xabc0\' AND E\'\\\\xabcf\') and (event_tags.tag_name = \'d\' AND event_tags.tag_value = \'variable\') order by "event_created_at" asc limit 500')
+        })
+      })
     })
 
     describe('2 filters', () => {

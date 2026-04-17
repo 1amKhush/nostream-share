@@ -50,6 +50,12 @@ const groupByLengthSpec = groupBy<string, 'exact' | 'even' | 'odd'>(
   )
 )
 
+const quoteColumnRef = (column: string): string =>
+  column
+    .split('.')
+    .map((segment) => `"${segment}"`)
+    .join('.')
+
 const debug = createLogger('event-repository')
 
 export class EventRepository implements IEventRepository {
@@ -65,6 +71,13 @@ export class EventRepository implements IEventRepository {
     }
     const queries = filters.map((currentFilter) => {
       const builder = this.readReplicaDbClient<DBEvent>('events')
+
+      const genericTagFilters = pipe(
+        toPairs,
+        filter(pipe(nth(0) as () => string, isGenericTagQuery)) as any,
+      )(currentFilter as any) as [string, string[]][]
+
+      const isTagQuery = genericTagFilters.length > 0
 
       forEachObjIndexed((tableFields: string[], filterName: string | number) => {
         builder.andWhere((bd) => {
@@ -82,7 +95,7 @@ export class EventRepository implements IEventRepository {
                   even: forEach((prefix: string) =>
                     tableFields.forEach((tableField) =>
                       bd.orWhereRaw(
-                        `substring("${tableField}" from 1 for ?) = ?`,
+                        `substring(${quoteColumnRef(tableField)} from 1 for ?) = ?`,
                         [prefix.length >> 1, toBuffer(prefix)]
                       )
                     )
@@ -90,7 +103,7 @@ export class EventRepository implements IEventRepository {
                   odd: forEach((prefix: string) =>
                     tableFields.forEach((tableField) =>
                       bd.orWhereRaw(
-                        `substring("${tableField}" from 1 for ?) BETWEEN ? AND ?`,
+                        `substring(${quoteColumnRef(tableField)} from 1 for ?) BETWEEN ? AND ?`,
                         [
                           (prefix.length >> 1) + 1,
                           `\\x${prefix}0`,
@@ -106,7 +119,7 @@ export class EventRepository implements IEventRepository {
         })
       })({
         authors: ['event_pubkey'],
-        ids: ['event_id'],
+        ids: [isTagQuery ? 'events.event_id' : 'event_id'],
       })
 
       if (Array.isArray(currentFilter.kinds)) {
@@ -130,25 +143,19 @@ export class EventRepository implements IEventRepository {
       const andWhereRaw = invoker(1, 'andWhereRaw')
       const orWhereRaw = invoker(2, 'orWhereRaw')
 
-      let isTagQuery = false
-      pipe(
-        toPairs,
-        filter(pipe(nth(0) as () => string, isGenericTagQuery)) as any,
-        forEach(([filterName, criteria]: [string, string[]]) => {
-          isTagQuery = true
-          builder.andWhere((bd) => {
-            ifElse(
-              isEmpty,
-              () => andWhereRaw('1 = 0', bd),
-              forEach((criterion: string) => void orWhereRaw(
-                'event_tags.tag_name = ? AND event_tags.tag_value = ?',
-                [filterName[1], criterion],
-                bd,
-              )),
-            )(criteria)
-          })
-        }),
-      )(currentFilter as any)
+      forEach(([filterName, criteria]: [string, string[]]) => {
+        builder.andWhere((bd) => {
+          ifElse(
+            isEmpty,
+            () => andWhereRaw('1 = 0', bd),
+            forEach((criterion: string) => void orWhereRaw(
+              'event_tags.tag_name = ? AND event_tags.tag_value = ?',
+              [filterName[1], criterion],
+              bd,
+            )),
+          )(criteria)
+        })
+      })(genericTagFilters)
 
       if (isTagQuery) {
         builder.leftJoin('event_tags', 'events.event_id', 'event_tags.event_id')
